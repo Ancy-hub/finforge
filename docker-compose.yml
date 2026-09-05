@@ -1,0 +1,56 @@
+services:
+  backend:
+    build:
+      context: ./finforge
+      dockerfile: Dockerfile
+    container_name: finforge-backend
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:sqlserver://sqlserver:1433;databaseName=FinForgeDB;encrypt=true;trustServerCertificate=true
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=Your_Password123
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - finforge-network
+
+  frontend:
+    build:
+      context: ./finForgeUI
+      dockerfile: Dockerfile
+    container_name: finforge-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - finforge-network
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: finforge-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Your_Password123
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Your_Password123' -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - finforge-network
+
+volumes:
+  mssql-data:
+
+networks:
+  finforge-network:
+    driver: bridge

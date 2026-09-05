@@ -153,7 +153,7 @@ All backend API endpoints are rooted at `http://localhost:8082/api`:
 Open a terminal and start the Spring Boot REST API on port `8082`:
 
 ```powershell
-cd c:\Users\ancza\Downloads\finForge\finforge
+cd finforge
 .\mvnw.cmd spring-boot:run -DskipTests
 ```
 
@@ -177,8 +177,29 @@ Open your browser at:
 
 ---
 
+## 🐳 Running with Docker (One-Command Setup)
+
+You can spin up the entire application stack (Frontend, Backend, and SQL Server Database) using Docker:
+
+```powershell
+# Build and launch all containers
+docker compose up --build
+```
+
+- **Frontend Web UI**: `http://localhost` (Port 80)
+- **Backend REST API**: `http://localhost:8082/api`
+- **SQL Server DB**: `localhost:1433`
+
+To stop the containers:
+```powershell
+docker compose down
+```
+
+---
+
 ## Technologies Used
 
-- **Frontend**: React 18, Vite 5, Lucide React icons, Vanilla CSS (CSS Variables, Flexbox, CSS Grid, Glassmorphism).
+- **Frontend**: React 18, Vite 5, Lucide React icons, Vanilla CSS (CSS Variables, Flexbox, CSS Grid, Glassmorphism), Nginx (Docker).
 - **Backend**: Spring Boot 3.2, Jakarta Servlet 6.0, JDBC (MSSQL Driver), Apache DBCP2.
+- **DevOps / Containers**: Docker, Multi-stage Builds, Docker Compose.
 - **Architecture**: Separated UI Controllers & UI Services communicating with a RESTful Backend API.
