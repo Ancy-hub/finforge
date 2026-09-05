@@ -1,0 +1,25 @@
+target/
+**/target/
+*.class
+
+# Node / React
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
