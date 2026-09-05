@@ -104,9 +104,7 @@ finForge/
 │   ├── src/main/resources/
 │   │   ├── application.properties   # server.port=8082 & DB config
 │   │   └── db.properties            # JDBC fallback configuration
-│   └── pom.xml
-│
-└── finForgeUI/                      # Legacy UI module
+    └── pom.xml
 ```
 
 ---
