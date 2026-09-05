@@ -200,6 +200,7 @@ docker compose down
 ## Technologies Used
 
 - **Frontend**: React 18, Vite 5, Lucide React icons, Vanilla CSS (CSS Variables, Flexbox, CSS Grid, Glassmorphism), Nginx (Docker).
-- **Backend**: Spring Boot 3.2, Jakarta Servlet 6.0, JDBC (MSSQL Driver), Apache DBCP2.
+- **Backend**: Spring Boot 3.2, Spring Data JPA, Hibernate 6, Jakarta Persistence API, JDBC (MSSQL Driver), HikariCP.
+- **Testing**: JUnit 5, Mockito.
 - **DevOps / Containers**: Docker, Multi-stage Builds, Docker Compose.
-- **Architecture**: Separated UI Controllers & UI Services communicating with a RESTful Backend API.
+- **Architecture**: Separated UI Controllers & UI Services communicating with a RESTful Spring Boot + JPA Backend.

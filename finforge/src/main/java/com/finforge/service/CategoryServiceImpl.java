@@ -5,26 +5,38 @@ import com.finforge.dto.CategoryDTO;
 import com.finforge.exception.DAOException;
 import com.finforge.exception.ValidationException;
 import com.finforge.model.Category;
+import com.finforge.repository.CategoryRepository;
 import com.finforge.util.ValidationUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 /**
- * Business-logic implementation for category management.
+ * Business-logic implementation for category management using Spring Data JPA.
  */
+@Service
+@Transactional
 public class CategoryServiceImpl implements CategoryService {
 
     private static final Logger logger = LogManager.getLogger(CategoryServiceImpl.class);
 
+    private final CategoryRepository categoryRepository;
     private final CategoryDAO categoryDAO;
 
-    public CategoryServiceImpl(CategoryDAO categoryDAO) {
-        this.categoryDAO = categoryDAO;
+    @Autowired
+    public CategoryServiceImpl(CategoryRepository categoryRepository) {
+        this.categoryRepository = categoryRepository;
+        this.categoryDAO = null;
     }
 
-    // -----------------------------------------------------------------------
+    public CategoryServiceImpl(CategoryDAO categoryDAO) {
+        this.categoryRepository = null;
+        this.categoryDAO = categoryDAO;
+    }
 
     @Override
     public Category addCategory(int userId, CategoryDTO dto)
@@ -33,7 +45,11 @@ public class CategoryServiceImpl implements CategoryService {
         ValidationUtil.validateNotEmpty(dto.getName(), "Category name");
 
         String trimmedName = dto.getName().trim();
-        if (categoryDAO.existsByNameAndUserId(trimmedName, userId)) {
+        boolean exists = (categoryRepository != null)
+                ? categoryRepository.existsByNameAndUserId(trimmedName, userId)
+                : categoryDAO.existsByNameAndUserId(trimmedName, userId);
+
+        if (exists) {
             throw new ValidationException("Category name",
                     "A category named '" + trimmedName + "' already exists.");
         }
@@ -43,7 +59,10 @@ public class CategoryServiceImpl implements CategoryService {
         category.setDescription(dto.getDescription() != null ? dto.getDescription().trim() : null);
         category.setUserId(userId);
 
-        Category saved = categoryDAO.save(category);
+        Category saved = (categoryRepository != null)
+                ? categoryRepository.save(category)
+                : categoryDAO.save(category);
+
         logger.info("Category added: id={} name='{}' userId={}",
                 saved.getCategoryId(), saved.getName(), userId);
         return saved;
@@ -56,7 +75,11 @@ public class CategoryServiceImpl implements CategoryService {
         int catId = ValidationUtil.validateId(dto.getCategoryId(), "Category ID");
         ValidationUtil.validateNotEmpty(dto.getName(), "Category name");
 
-        if (!categoryDAO.existsByIdAndUserId(catId, userId)) {
+        boolean exists = (categoryRepository != null)
+                ? categoryRepository.existsByCategoryIdAndUserId(catId, userId)
+                : categoryDAO.existsByIdAndUserId(catId, userId);
+
+        if (!exists) {
             throw new ValidationException("Category not found or access denied.");
         }
 
@@ -66,7 +89,11 @@ public class CategoryServiceImpl implements CategoryService {
         category.setDescription(dto.getDescription() != null ? dto.getDescription().trim() : null);
         category.setUserId(userId);
 
-        categoryDAO.update(category);
+        if (categoryRepository != null) {
+            categoryRepository.save(category);
+        } else {
+            categoryDAO.update(category);
+        }
         logger.info("Category updated: id={} name='{}' userId={}", catId, category.getName(), userId);
     }
 
@@ -74,24 +101,42 @@ public class CategoryServiceImpl implements CategoryService {
     public void deleteCategory(int categoryId, int userId)
             throws ValidationException, DAOException {
 
-        if (!categoryDAO.existsByIdAndUserId(categoryId, userId)) {
+        boolean exists = (categoryRepository != null)
+                ? categoryRepository.existsByCategoryIdAndUserId(categoryId, userId)
+                : categoryDAO.existsByIdAndUserId(categoryId, userId);
+
+        if (!exists) {
             throw new ValidationException("Category not found or access denied.");
         }
-        categoryDAO.delete(categoryId);
+
+        if (categoryRepository != null) {
+            categoryRepository.deleteByCategoryIdAndUserId(categoryId, userId);
+        } else {
+            categoryDAO.delete(categoryId);
+        }
         logger.info("Category deleted: id={} userId={}", categoryId, userId);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Category getCategoryById(int categoryId, int userId)
             throws ValidationException, DAOException {
 
+        if (categoryRepository != null) {
+            return categoryRepository.findByCategoryIdAndUserId(categoryId, userId)
+                    .orElseThrow(() -> new ValidationException("Category not found or access denied."));
+        }
         return categoryDAO.findById(categoryId)
                 .filter(c -> c.getUserId() == userId)
                 .orElseThrow(() -> new ValidationException("Category not found or access denied."));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Category> getAllCategories(int userId) throws DAOException {
+        if (categoryRepository != null) {
+            return categoryRepository.findByUserIdOrderByNameAsc(userId);
+        }
         return categoryDAO.findAllByUserId(userId);
     }
 }

@@ -1,5 +1,9 @@
 package com.finforge.model;
 
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -7,14 +11,33 @@ import java.time.LocalDateTime;
 /**
  * Domain model representing a single income entry.
  */
+@Entity
+@Table(name = "incomes")
 public class Income {
 
-    private int           incomeId;
-    private String        source;
-    private BigDecimal    amount;
-    private LocalDate     incomeDate;
-    private int           userId;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "income_id")
+    private int incomeId;
+
+    @Column(name = "source", nullable = false, length = 100)
+    private String source;
+
+    @Column(name = "amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal amount;
+
+    @Column(name = "income_date", nullable = false)
+    private LocalDate incomeDate;
+
+    @Column(name = "user_id", nullable = false)
+    private int userId;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
     public Income() {}

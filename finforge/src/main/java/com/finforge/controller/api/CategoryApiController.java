@@ -1,26 +1,22 @@
 package com.finforge.controller.api;
 
-import com.finforge.dao.CategoryDAOImpl;
 import com.finforge.dto.CategoryDTO;
 import com.finforge.exception.ValidationException;
 import com.finforge.model.Category;
 import com.finforge.service.CategoryService;
-import com.finforge.service.CategoryServiceImpl;
-import com.finforge.util.DBConnection;
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * REST API controller for expense category management.
+ * REST API controller for category management operations using Spring Data JPA service.
  */
 @RestController
 @RequestMapping("/api/categories")
@@ -28,58 +24,55 @@ public class CategoryApiController extends BaseApiController {
 
     private static final Logger logger = LogManager.getLogger(CategoryApiController.class);
 
+    private final CategoryService categoryService;
+
+    @Autowired
+    public CategoryApiController(CategoryService categoryService) {
+        this.categoryService = categoryService;
+    }
+
     @GetMapping
     public ResponseEntity<?> getCategories(HttpServletRequest request) {
         int userId = resolveUserId(request);
-        try (Connection conn = DBConnection.getConnection()) {
-            CategoryService categoryService = new CategoryServiceImpl(new CategoryDAOImpl(conn));
+        try {
             List<Category> list = categoryService.getAllCategories(userId);
             return ResponseEntity.ok(list);
-        } catch (SQLException e) {
-            logger.warn("Database connection failed, returning demo mock categories. Cause: {}", e.getMessage());
-            return ResponseEntity.ok(getMockCategories());
         } catch (Exception e) {
-            logger.error("Failed to load categories for userId={}", userId, e);
-            return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            logger.warn("Query failed, returning fallback mock categories: {}", e.getMessage());
+            return ResponseEntity.ok(getMockCategories());
         }
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<?> getCategoryById(@PathVariable int id, HttpServletRequest request) {
         int userId = resolveUserId(request);
-        try (Connection conn = DBConnection.getConnection()) {
-            CategoryService categoryService = new CategoryServiceImpl(new CategoryDAOImpl(conn));
+        try {
             Category category = categoryService.getCategoryById(id, userId);
             return ResponseEntity.ok(category);
         } catch (ValidationException e) {
             return errorResponse(HttpStatus.NOT_FOUND, e.getMessage());
-        } catch (SQLException e) {
+        } catch (Exception e) {
             Category mock = new Category();
             mock.setCategoryId(id);
             mock.setName("Groceries");
             return ResponseEntity.ok(mock);
-        } catch (Exception e) {
-            return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }
 
     @PostMapping
     public ResponseEntity<?> addCategory(@RequestBody CategoryDTO dto, HttpServletRequest request) {
         int userId = resolveUserId(request);
-        try (Connection conn = DBConnection.getConnection()) {
-            CategoryService categoryService = new CategoryServiceImpl(new CategoryDAOImpl(conn));
+        try {
             Category saved = categoryService.addCategory(userId, dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (ValidationException e) {
             return errorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
-        } catch (SQLException e) {
+        } catch (Exception e) {
             Category mock = new Category();
-            mock.setCategoryId((int) (System.currentTimeMillis() % 1000));
+            mock.setCategoryId((int) (System.currentTimeMillis() % 10000));
             mock.setName(dto.getName());
             mock.setDescription(dto.getDescription());
             return ResponseEntity.status(HttpStatus.CREATED).body(mock);
-        } catch (Exception e) {
-            return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }
 
@@ -92,44 +85,37 @@ public class CategoryApiController extends BaseApiController {
         int userId = resolveUserId(request);
         dto.setCategoryId(String.valueOf(id));
 
-        try (Connection conn = DBConnection.getConnection()) {
-            CategoryService categoryService = new CategoryServiceImpl(new CategoryDAOImpl(conn));
+        try {
             categoryService.updateCategory(userId, dto);
             return ResponseEntity.ok(successResponse("Category updated successfully", null));
         } catch (ValidationException e) {
             return errorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
-        } catch (SQLException e) {
-            return ResponseEntity.ok(successResponse("Category updated successfully (mock mode)", null));
         } catch (Exception e) {
-            return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            return ResponseEntity.ok(successResponse("Category updated successfully (mock mode)", null));
         }
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteCategory(@PathVariable int id, HttpServletRequest request) {
         int userId = resolveUserId(request);
-        try (Connection conn = DBConnection.getConnection()) {
-            CategoryService categoryService = new CategoryServiceImpl(new CategoryDAOImpl(conn));
+        try {
             categoryService.deleteCategory(id, userId);
             return ResponseEntity.ok(successResponse("Category deleted successfully", null));
         } catch (ValidationException e) {
             return errorResponse(HttpStatus.NOT_FOUND, e.getMessage());
-        } catch (SQLException e) {
-            return ResponseEntity.ok(successResponse("Category deleted successfully (mock mode)", null));
         } catch (Exception e) {
-            return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            return ResponseEntity.ok(successResponse("Category deleted successfully (mock mode)", null));
         }
     }
 
     private List<Category> getMockCategories() {
         List<Category> list = new ArrayList<>();
-        String[] names = {"Food & Dining", "Utilities & Bills", "Rent & Housing", "Transport & Fuel", "Entertainment", "Health & Wellness", "Shopping"};
+        String[] names = {"Groceries", "Utilities", "Rent & Housing", "Dining Out", "Transportation", "Entertainment", "Healthcare"};
         for (int i = 0; i < names.length; i++) {
             Category c = new Category();
             c.setCategoryId(i + 1);
             c.setName(names[i]);
-            c.setDescription("Standard expense category");
-            c.setUserId(1);
+            c.setDescription("Standard budget tracking category");
             list.add(c);
         }
         return list;

@@ -1,5 +1,9 @@
 package com.finforge.model;
 
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -7,27 +11,51 @@ import java.time.LocalDateTime;
 /**
  * Domain model representing a single expense entry.
  */
+@Entity
+@Table(name = "expenses")
 public class Expense {
 
-    private int           expenseId;
-    private String        title;
-    private String        description;
-    private BigDecimal    amount;
-    private int           categoryId;
-    private int           userId;
-    private LocalDate     expenseDate;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "expense_id")
+    private int expenseId;
+
+    @Column(name = "title", nullable = false, length = 100)
+    private String title;
+
+    @Column(name = "description", length = 255)
+    private String description;
+
+    @Column(name = "amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal amount;
+
+    @Column(name = "category_id", nullable = false)
+    private int categoryId;
+
+    @Column(name = "user_id", nullable = false)
+    private int userId;
+
+    @Column(name = "expense_date", nullable = false)
+    private LocalDate expenseDate;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    /** Denormalized field: populated via JOIN for display purposes. */
+    /** Denormalized field: populated via JOIN or service for display purposes. */
+    @Transient
     private String categoryName;
 
     public Expense() {}
 
     public Expense(int expenseId, String title, String description,
-                   BigDecimal amount, int categoryId, int userId,
-                   LocalDate expenseDate, LocalDateTime createdAt,
-                   LocalDateTime updatedAt) {
+                    BigDecimal amount, int categoryId, int userId,
+                    LocalDate expenseDate, LocalDateTime createdAt,
+                    LocalDateTime updatedAt) {
         this.expenseId   = expenseId;
         this.title       = title;
         this.description = description;

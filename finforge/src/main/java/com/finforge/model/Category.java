@@ -1,16 +1,33 @@
 package com.finforge.model;
 
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+
 import java.time.LocalDateTime;
 
 /**
  * Domain model representing an expense category that belongs to a user.
  */
+@Entity
+@Table(name = "categories")
 public class Category {
 
-    private int           categoryId;
-    private String        name;
-    private String        description;
-    private int           userId;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "category_id")
+    private int categoryId;
+
+    @Column(name = "name", nullable = false, length = 50)
+    private String name;
+
+    @Column(name = "description", length = 255)
+    private String description;
+
+    @Column(name = "user_id", nullable = false)
+    private int userId;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     public Category() {}

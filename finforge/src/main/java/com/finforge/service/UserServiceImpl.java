@@ -1,7 +1,6 @@
 package com.finforge.service;
 
 import com.finforge.dao.CategoryDAO;
-import com.finforge.dao.CategoryDAOImpl;
 import com.finforge.dao.UserDAO;
 import com.finforge.dto.UserDTO;
 import com.finforge.exception.DAOException;
@@ -11,18 +10,24 @@ import com.finforge.exception.UserNotFoundException;
 import com.finforge.exception.ValidationException;
 import com.finforge.model.Category;
 import com.finforge.model.User;
+import com.finforge.repository.CategoryRepository;
+import com.finforge.repository.UserRepository;
 import com.finforge.util.PasswordUtil;
 import com.finforge.util.ValidationUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Connection;
 import java.util.Arrays;
 import java.util.List;
 
 /**
- * Business-logic implementation for user management.
+ * Business-logic implementation for user management using Spring Data JPA.
  */
+@Service
+@Transactional
 public class UserServiceImpl implements UserService {
 
     private static final Logger logger = LogManager.getLogger(UserServiceImpl.class);
@@ -37,20 +42,26 @@ public class UserServiceImpl implements UserService {
             new String[]{"Entertainment", "Entertainment and recreation"}
     );
 
-    private final UserDAO     userDAO;
-    private final CategoryDAO categoryDAO;
+    private final UserRepository   userRepository;
+    private final CategoryRepository categoryRepository;
+    private final UserDAO          userDAO;
+    private final CategoryDAO      categoryDAO;
 
-    /**
-     * Primary constructor — injects both DAOs.
-     */
-    public UserServiceImpl(UserDAO userDAO, CategoryDAO categoryDAO) {
-        this.userDAO     = userDAO;
-        this.categoryDAO = categoryDAO;
+    @Autowired
+    public UserServiceImpl(UserRepository userRepository, CategoryRepository categoryRepository) {
+        this.userRepository     = userRepository;
+        this.categoryRepository = categoryRepository;
+        this.userDAO            = null;
+        this.categoryDAO        = null;
     }
 
-    /**
-     * Convenience constructor for contexts where category seeding is not needed.
-     */
+    public UserServiceImpl(UserDAO userDAO, CategoryDAO categoryDAO) {
+        this.userRepository     = null;
+        this.categoryRepository = null;
+        this.userDAO            = userDAO;
+        this.categoryDAO        = categoryDAO;
+    }
+
     public UserServiceImpl(UserDAO userDAO) {
         this(userDAO, null);
     }
@@ -68,11 +79,20 @@ public class UserServiceImpl implements UserService {
         ValidationUtil.validateNotEmpty(dto.getFirstName(), "First name");
         ValidationUtil.validateNotEmpty(dto.getLastName(),  "Last name");
 
-        if (userDAO.existsByUsername(dto.getUsername())) {
+        boolean userExists = (userRepository != null)
+                ? userRepository.existsByUsername(dto.getUsername())
+                : userDAO.existsByUsername(dto.getUsername());
+
+        if (userExists) {
             throw new DuplicateUserException(
                     "Username '" + dto.getUsername() + "' is already taken.");
         }
-        if (userDAO.existsByEmail(dto.getEmail())) {
+
+        boolean emailExists = (userRepository != null)
+                ? userRepository.existsByEmail(dto.getEmail())
+                : userDAO.existsByEmail(dto.getEmail());
+
+        if (emailExists) {
             throw new DuplicateUserException(
                     "An account with email '" + dto.getEmail() + "' already exists.");
         }
@@ -86,10 +106,20 @@ public class UserServiceImpl implements UserService {
         user.setPhone(dto.getPhone() != null ? dto.getPhone().trim() : null);
         user.setActive(true);
 
-        User savedUser = userDAO.save(user);
+        User savedUser = (userRepository != null)
+                ? userRepository.save(user)
+                : userDAO.save(user);
 
         // Seed default categories for the new user
-        if (categoryDAO != null) {
+        if (categoryRepository != null) {
+            for (String[] cat : DEFAULT_CATEGORIES) {
+                Category category = new Category();
+                category.setName(cat[0]);
+                category.setDescription(cat[1]);
+                category.setUserId(savedUser.getUserId());
+                categoryRepository.save(category);
+            }
+        } else if (categoryDAO != null) {
             for (String[] cat : DEFAULT_CATEGORIES) {
                 Category category = new Category();
                 category.setName(cat[0]);
@@ -105,14 +135,21 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public User login(String username, String password)
             throws ValidationException, InvalidCredentialsException, DAOException {
 
         ValidationUtil.validateNotEmpty(username, "Username");
         ValidationUtil.validateNotEmpty(password, "Password");
 
-        User user = userDAO.findByUsername(username.trim())
-                .orElseThrow(InvalidCredentialsException::new);
+        User user;
+        if (userRepository != null) {
+            user = userRepository.findByUsername(username.trim())
+                    .orElseThrow(InvalidCredentialsException::new);
+        } else {
+            user = userDAO.findByUsername(username.trim())
+                    .orElseThrow(InvalidCredentialsException::new);
+        }
 
         if (!user.isActive()) {
             throw new InvalidCredentialsException("Your account is inactive. Please contact support.");
@@ -126,7 +163,12 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public User getProfile(int userId) throws UserNotFoundException, DAOException {
+        if (userRepository != null) {
+            return userRepository.findById(userId)
+                    .orElseThrow(() -> new UserNotFoundException(userId));
+        }
         return userDAO.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException(userId));
     }
@@ -139,15 +181,25 @@ public class UserServiceImpl implements UserService {
         ValidationUtil.validateNotEmpty(dto.getLastName(),  "Last name");
         ValidationUtil.validateEmail(dto.getEmail());
 
-        User existing = userDAO.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException(userId));
+        User existing;
+        if (userRepository != null) {
+            existing = userRepository.findById(userId)
+                    .orElseThrow(() -> new UserNotFoundException(userId));
+        } else {
+            existing = userDAO.findById(userId)
+                    .orElseThrow(() -> new UserNotFoundException(userId));
+        }
 
         existing.setFirstName(dto.getFirstName().trim());
         existing.setLastName(dto.getLastName().trim());
         existing.setEmail(dto.getEmail().trim().toLowerCase());
         existing.setPhone(dto.getPhone() != null ? dto.getPhone().trim() : null);
 
-        userDAO.update(existing);
+        if (userRepository != null) {
+            userRepository.save(existing);
+        } else {
+            userDAO.update(existing);
+        }
     }
 
     @Override
@@ -161,14 +213,26 @@ public class UserServiceImpl implements UserService {
         ValidationUtil.validatePassword(newPassword);
         ValidationUtil.validatePasswordsMatch(newPassword, confirmPassword);
 
-        User user = userDAO.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException(userId));
+        User user;
+        if (userRepository != null) {
+            user = userRepository.findById(userId)
+                    .orElseThrow(() -> new UserNotFoundException(userId));
+        } else {
+            user = userDAO.findById(userId)
+                    .orElseThrow(() -> new UserNotFoundException(userId));
+        }
 
         if (!PasswordUtil.verifyPassword(currentPassword, user.getPasswordHash())) {
             throw new InvalidCredentialsException("Current password is incorrect.");
         }
 
-        userDAO.updatePassword(userId, PasswordUtil.hashPassword(newPassword));
+        String newHash = PasswordUtil.hashPassword(newPassword);
+        if (userRepository != null) {
+            user.setPasswordHash(newHash);
+            userRepository.save(user);
+        } else {
+            userDAO.updatePassword(userId, newHash);
+        }
         logger.info("Password changed for userId={}", userId);
     }
 }

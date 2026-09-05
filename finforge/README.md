@@ -1,6 +1,6 @@
-# FinForge
+# FinForge Backend
 
-A full-stack **enterprise-style personal finance web application** built with pure Java EE — no Spring, no Hibernate, no Docker. Track expenses and income, filter and paginate records, and view financial summary reports, all backed by SQL Server.
+An **enterprise personal finance REST API** built with **Spring Boot 3.2**, **Spring Data JPA**, and **Hibernate 6**, backed by SQL Server. Exposes robust JSON endpoints for the React frontend, fully containerized with Docker.
 
 ---
 
@@ -26,15 +26,13 @@ A full-stack **enterprise-style personal finance web application** built with pu
 | Layer           | Technology                                     |
 | --------------- | ---------------------------------------------- |
 | Language        | Java 21                                        |
-| Web container   | Apache Tomcat 10.x                             |
-| Presentation    | JSP 3.1 · JSTL 3.0 (jakarta namespace)         |
-| Controller      | Jakarta Servlet 6.0                            |
-| Persistence     | Raw JDBC · SQL Server (mssql-jdbc 12.4.2)      |
-| Connection pool | Tomcat DBCP2 via JNDI (`META-INF/context.xml`) |
-| Logging         | Log4j 2.23.1 (API + Core)                      |
-| Build           | Maven 3.x (WAR packaging)                      |
-| Testing         | JUnit 5.10.1 · Mockito 5.7.0                   |
-| Frontend        | Vanilla CSS (custom properties) · Vanilla JS   |
+| Framework       | Spring Boot 3.2.0                              |
+| Persistence     | Spring Data JPA · Hibernate 6 (Jakarta)        |
+| Database Driver | Microsoft JDBC Driver for SQL Server           |
+| Connection Pool | HikariCP (Spring Boot Auto-configured)          |
+| Logging         | Log4j 2 / SLF4J                                |
+| Build & Runtime | Maven 3.x · Docker (Multi-stage)               |
+| Testing         | JUnit 5 · Mockito                              |
 
 ---
 

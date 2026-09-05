@@ -7,35 +7,56 @@ import com.finforge.dto.PagedResult;
 import com.finforge.exception.DAOException;
 import com.finforge.exception.ValidationException;
 import com.finforge.model.Expense;
+import com.finforge.repository.CategoryRepository;
+import com.finforge.repository.ExpenseRepository;
 import com.finforge.util.ValidationUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Business-logic implementation for expense management.
+ * Business-logic implementation for expense management using Spring Data JPA.
  */
+@Service
+@Transactional
 public class ExpenseServiceImpl implements ExpenseService {
 
     private static final Logger logger = LogManager.getLogger(ExpenseServiceImpl.class);
 
+    private final ExpenseRepository expenseRepository;
+    private final CategoryRepository categoryRepository;
     private final ExpenseDAO expenseDAO;
 
-    public ExpenseServiceImpl(ExpenseDAO expenseDAO) {
-        this.expenseDAO = expenseDAO;
+    @Autowired
+    public ExpenseServiceImpl(ExpenseRepository expenseRepository, CategoryRepository categoryRepository) {
+        this.expenseRepository = expenseRepository;
+        this.categoryRepository = categoryRepository;
+        this.expenseDAO = null;
     }
 
-    // -----------------------------------------------------------------------
+    public ExpenseServiceImpl(ExpenseDAO expenseDAO) {
+        this.expenseRepository = null;
+        this.categoryRepository = null;
+        this.expenseDAO = expenseDAO;
+    }
 
     @Override
     public Expense addExpense(int userId, ExpenseDTO dto)
             throws ValidationException, DAOException {
 
         Expense expense = validateAndBuild(userId, dto);
-        Expense saved   = expenseDAO.save(expense);
+        Expense saved = (expenseRepository != null)
+                ? expenseRepository.save(expense)
+                : expenseDAO.save(expense);
+
         logger.info("Expense added: id={} title='{}' userId={}",
                 saved.getExpenseId(), saved.getTitle(), userId);
         return saved;
@@ -47,29 +68,55 @@ public class ExpenseServiceImpl implements ExpenseService {
 
         int expenseId = ValidationUtil.validateId(dto.getExpenseId(), "Expense ID");
 
-        if (!expenseDAO.existsByIdAndUserId(expenseId, userId)) {
-            throw new ValidationException("Expense not found or access denied.");
+        if (expenseRepository != null) {
+            if (expenseRepository.findByExpenseIdAndUserId(expenseId, userId).isEmpty()) {
+                throw new ValidationException("Expense not found or access denied.");
+            }
+        } else {
+            if (!expenseDAO.existsByIdAndUserId(expenseId, userId)) {
+                throw new ValidationException("Expense not found or access denied.");
+            }
         }
 
         Expense expense = validateAndBuild(userId, dto);
         expense.setExpenseId(expenseId);
-        expenseDAO.update(expense);
+
+        if (expenseRepository != null) {
+            expenseRepository.save(expense);
+        } else {
+            expenseDAO.update(expense);
+        }
     }
 
     @Override
     public void deleteExpense(int expenseId, int userId)
             throws ValidationException, DAOException {
 
-        if (!expenseDAO.existsByIdAndUserId(expenseId, userId)) {
-            throw new ValidationException("Expense not found or access denied.");
+        if (expenseRepository != null) {
+            if (expenseRepository.findByExpenseIdAndUserId(expenseId, userId).isEmpty()) {
+                throw new ValidationException("Expense not found or access denied.");
+            }
+            expenseRepository.deleteByExpenseIdAndUserId(expenseId, userId);
+        } else {
+            if (!expenseDAO.existsByIdAndUserId(expenseId, userId)) {
+                throw new ValidationException("Expense not found or access denied.");
+            }
+            expenseDAO.delete(expenseId);
         }
-        expenseDAO.delete(expenseId);
         logger.info("Expense deleted: id={} userId={}", expenseId, userId);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Expense getExpenseById(int expenseId, int userId)
             throws ValidationException, DAOException {
+
+        if (expenseRepository != null) {
+            Expense expense = expenseRepository.findByExpenseIdAndUserId(expenseId, userId)
+                    .orElseThrow(() -> new ValidationException("Expense not found or access denied."));
+            enrichCategoryName(expense);
+            return expense;
+        }
 
         return expenseDAO.findById(expenseId)
                 .filter(e -> e.getUserId() == userId)
@@ -77,11 +124,18 @@ public class ExpenseServiceImpl implements ExpenseService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Expense> getAllExpenses(int userId) throws DAOException {
+        if (expenseRepository != null) {
+            List<Expense> list = expenseRepository.findByUserIdOrderByExpenseDateDesc(userId);
+            list.forEach(this::enrichCategoryName);
+            return list;
+        }
         return expenseDAO.findAllByUserId(userId);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Expense> searchExpenses(int userId, ExpenseFilterDTO filter)
             throws ValidationException, DAOException {
 
@@ -105,14 +159,33 @@ public class ExpenseServiceImpl implements ExpenseService {
         if (rawCat != null && !rawCat.trim().isEmpty()) {
             categoryId = ValidationUtil.validateId(rawCat.trim(), "Category");
         }
-        logger.debug("Searching expenses: userId={} from={} to={} categoryId={}",
-                userId, fromDate, toDate, categoryId);
+
+        if (expenseRepository != null) {
+            List<Expense> list;
+            if (fromDate != null && toDate != null) {
+                list = expenseRepository.findByUserIdAndExpenseDateBetweenOrderByExpenseDateDesc(userId, fromDate, toDate);
+            } else if (categoryId != null) {
+                list = expenseRepository.findByUserIdAndCategoryIdOrderByExpenseDateDesc(userId, categoryId);
+            } else {
+                list = expenseRepository.findByUserIdOrderByExpenseDateDesc(userId);
+            }
+            list.forEach(this::enrichCategoryName);
+            return list;
+        }
+
         return expenseDAO.findByFilters(userId, fromDate, toDate, categoryId);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PagedResult<Expense> getAllExpensesPaged(int userId, int page, int pageSize)
             throws DAOException {
+
+        if (expenseRepository != null) {
+            Page<Expense> paged = expenseRepository.findByUserIdOrderByExpenseDateDesc(userId, PageRequest.of(Math.max(0, page - 1), pageSize));
+            paged.getContent().forEach(this::enrichCategoryName);
+            return new PagedResult<>(paged.getContent(), page, pageSize, (int) paged.getTotalElements());
+        }
 
         int total  = expenseDAO.countByUserId(userId);
         int offset = (page - 1) * pageSize;
@@ -120,9 +193,12 @@ public class ExpenseServiceImpl implements ExpenseService {
         return new PagedResult<>(items, page, pageSize, total);
     }
 
-    // -----------------------------------------------------------------------
-    // Private helpers
-    // -----------------------------------------------------------------------
+    private void enrichCategoryName(Expense expense) {
+        if (categoryRepository != null && expense != null && expense.getCategoryName() == null) {
+            categoryRepository.findById(expense.getCategoryId())
+                    .ifPresent(c -> expense.setCategoryName(c.getName()));
+        }
+    }
 
     private Expense validateAndBuild(int userId, ExpenseDTO dto) throws ValidationException {
         ValidationUtil.validateNotEmpty(dto.getTitle(), "Title");
