@@ -41,7 +41,7 @@ The system follows a strict, decoupled flow:
 ├────────────────────────────────────────────────────────┤
 │                     Service Layer                      │
 ├────────────────────────────────────────────────────────┤
-│                       DAO Layer                        │
+│           Repository Layer (Spring Data JPA)           │
 ├────────────────────────────────────────────────────────┤
 │                 SQL Server Database                    │
 └────────────────────────────────────────────────────────┘
@@ -96,15 +96,20 @@ finForge/
 │   │   │   ├── CategoryApiController.java
 │   │   │   ├── ReportApiController.java
 │   │   │   └── UserApiController.java
-│   │   ├── dao/                     # JDBC DAOs
+│   │   ├── repository/              # Spring Data JPA Repositories
+│   │   │   ├── UserRepository.java
+│   │   │   ├── CategoryRepository.java
+│   │   │   ├── ExpenseRepository.java
+│   │   │   └── IncomeRepository.java
+│   │   ├── service/                 # Business logic (@Service, @Transactional)
+│   │   ├── model/                   # JPA Domain Entities (@Entity, @Table)
+│   │   ├── dao/                     # JDBC DAOs (Fallback / Unit testing)
 │   │   ├── dto/                     # Form and payload DTOs
-│   │   ├── model/                   # Domain entities
-│   │   ├── service/                 # Business logic services
-│   │   └── util/                    # DBConnection, PasswordUtil, SessionUtil
+│   │   └── util/                    # PasswordUtil, SessionUtil, ValidationUtil
 │   ├── src/main/resources/
-│   │   ├── application.properties   # server.port=8082 & DB config
-│   │   └── db.properties            # JDBC fallback configuration
-    └── pom.xml
+│   │   └── application.properties   # server.port=8082, DB & Hibernate config
+│   ├── Dockerfile
+│   └── pom.xml
 ```
 
 ---

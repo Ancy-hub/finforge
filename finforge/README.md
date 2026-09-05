@@ -1,96 +1,85 @@
-# FinForge Backend
+# FinForge Backend API
 
-An **enterprise personal finance REST API** built with **Spring Boot 3.2**, **Spring Data JPA**, and **Hibernate 6**, backed by SQL Server. Exposes robust JSON endpoints for the React frontend, fully containerized with Docker.
-
----
-
-## Table of Contents
-
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Features](#features)
-- [Project Structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Database Setup](#database-setup)
-- [Configuration](#configuration)
-- [Build & Deploy](#build--deploy)
-- [Running Tests](#running-tests)
-- [URL Reference](#url-reference)
-- [Security Notes](#security-notes)
-- [Logging](#logging)
+A high-performance **enterprise personal finance REST API** built with **Java 21**, **Spring Boot 3.2**, **Spring Data JPA**, and **Hibernate 6**, backed by Microsoft SQL Server. It exposes secure, decoupled JSON endpoints consumed by the React frontend (`finForgeUI`), and is fully containerized with Docker.
 
 ---
 
 ## Tech Stack
 
-| Layer           | Technology                                     |
-| --------------- | ---------------------------------------------- |
-| Language        | Java 21                                        |
-| Framework       | Spring Boot 3.2.0                              |
-| Persistence     | Spring Data JPA · Hibernate 6 (Jakarta)        |
-| Database Driver | Microsoft JDBC Driver for SQL Server           |
-| Connection Pool | HikariCP (Spring Boot Auto-configured)          |
-| Logging         | Log4j 2 / SLF4J                                |
-| Build & Runtime | Maven 3.x · Docker (Multi-stage)               |
-| Testing         | JUnit 5 · Mockito                              |
+| Layer | Technology | Details |
+|---|---|---|
+| **Language** | Java 21 | Modern LTS features, Records, Pattern Matching |
+| **Framework** | Spring Boot 3.2.0 | Spring Web MVC, Inversion of Control, Embedded Tomcat |
+| **Persistence** | Spring Data JPA · Hibernate 6 | Jakarta Persistence API, Entity Mappings, JPQL |
+| **Database** | Microsoft SQL Server | Relational storage, indexes, check constraints |
+| **Connection Pool** | HikariCP | Auto-configured, low-latency connection pooling |
+| **Security & Auth** | Custom Session / PasswordUtil | SHA-256 password hashing, CORS policy |
+| **Logging** | Log4j 2 / SLF4J | Structured application logging |
+| **Build & Tooling** | Maven 3.x | Multi-stage Docker build, wrapper (`mvnw`) |
+| **Testing** | JUnit 5 · Mockito | Comprehensive Service, DAO, and Utility test suites |
 
 ---
 
 ## Architecture
 
-The application now supports both standard Java EE servlets and modern **Spring Boot REST API Controllers** (`/api/...`) connecting to the decoupled **React UI** (`finForgeUI`):
+FinForge follows a strict, decoupled **Controller-Service-Repository** enterprise pattern:
 
 ```
-React UI
-  └─► UI Controller (Routing vs Service Call Decision)
-        └─► UI Service (API HTTP Client)
-              └─► REST API Controllers (/api/...)
-                    └─► ServiceImpl (Business Logic)
-                          └─► DAOImpl (JDBC)
-                                └─► SQL Server
+┌────────────────────────────────────────────────────────┐
+│                   React Frontend (UI)                  │
+└──────────────────────────┬─────────────────────────────┘
+                           │ HTTP JSON Requests (:5173 or :80)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│      Spring Boot REST Controllers (/api/...)           │
+│   (Auth, Expenses, Incomes, Categories, Reports)       │
+├────────────────────────────────────────────────────────┤
+│             Service Layer (@Service, @Transactional)   │
+│   (Validation, Business Rules, Aggregations)           │
+├────────────────────────────────────────────────────────┤
+│             Repository Layer (Spring Data JPA)         │
+│   (UserRepository, ExpenseRepository, etc.)            │
+├────────────────────────────────────────────────────────┤
+│                 Hibernate ORM 6.x                      │
+│   (Entity Mappings, Schema Validation, Cache)          │
+├────────────────────────────────────────────────────────┤
+│             Microsoft SQL Server Database              │
+└────────────────────────────────────────────────────────┘
 ```
 
-- **REST Controllers** (`com.finforge.controller.api`) expose JSON endpoints for expenses, incomes, categories, reports, and user authentication on port 8082 with CORS support.
-- **Service layer** owns all validation (via `ValidationUtil`) and business rules. It is completely decoupled from HTTP.
-- **DAO layer** executes parameterised SQL statements only — no string concatenation, no SQL injection surface.
-- **Models** are plain Java objects; DTOs carry raw form-field values between the API tier and the service tier.
+1. **REST Controllers** (`com.finforge.controller.api`): Handle HTTP requests, parse JSON DTOs, enforce HTTP status codes, and delegate logic to services via constructor-injected Spring beans.
+2. **Service Layer** (`com.finforge.service`): Enforces business rules and validation (`ValidationUtil`), coordinates multi-step domain operations, and manages transactional boundaries with `@Transactional`.
+3. **Repository Layer** (`com.finforge.repository`): Extends Spring Data JPA's `JpaRepository` for type-safe data access, pagination (`Pageable`), and custom JPQL aggregation queries.
+4. **Domain Model** (`com.finforge.model`): Rich Jakarta Persistence entities (`@Entity`, `@Table`, `@Id`, `@GeneratedValue`, `@CreationTimestamp`, `@UpdateTimestamp`).
+5. **CORS Policy** (`com.finforge.config.CorsConfig`): Allows cross-origin requests from the React frontend running on localhost or via Docker Nginx.
 
 ---
 
-## Features
+## Key Features
 
-### Authentication & Accounts
+### 1. Authentication & Security
+- User registration with unique username and lowercase email enforcement.
+- SHA-256 salted password hashing (`PasswordUtil`).
+- Session-based authentication with `/api/auth/login`, `/api/auth/register`, `/api/auth/logout`, and `/api/auth/me`.
+- User profile updates and secure password changes.
 
-- User registration with unique username and email enforcement
-- SHA-256 password hashing (`PasswordUtil`)
-- Session-based authentication with `AuthFilter` protecting all authenticated routes
-- Profile management (edit name, email, phone)
-- Secure password change (current-password verification required)
-- Logout invalidates the session
+### 2. Expense Management
+- Full CRUD operations with title, description, amount, category, and date.
+- **Server-Side Pagination**: Efficient record retrieval using Spring Data JPA `Pageable` (`page`, `pageSize`).
+- **Multi-attribute Filtering**: Filter expenses by date range (`fromDate`, `toDate`) and/or category (`categoryId`).
+- Automatic default category seeding on user registration (Food, Travel, Rent, Medical, Shopping, Utilities, Entertainment).
 
-### Expenses
+### 3. Income Management
+- Track incoming cash flow with source, amount, and date.
+- Paginated retrieval and CRUD operations.
 
-- Add, edit, delete expenses with title, description, amount, category, and date
-- **Filter by date range and/or category** (dynamic SQL predicate building)
-- **Paginated list** (10 records per page, SQL Server `OFFSET … FETCH NEXT`)
-- **Page-total row** in the table footer showing the sum for the current page/filter
-- 7 default categories seeded automatically on registration
+### 4. Custom Categories
+- Create, update, and delete custom expense categories with per-user duplicate validation.
 
-### Income
-
-- Add, edit, delete income records with source, amount, and date
-- **Paginated list** (10 records per page)
-- **Page-total row** in the table footer
-
-### Categories
-
-- Full CRUD for custom expense categories
-- Duplicate name check per user
-
-### Reports & Dashboard
-
-- Dashboard card: total income, total expense, net savings (current all-time figures)
-- Full report page: monthly expense breakdown and per-category expense breakdown
+### 5. Financial Reports & Analytics
+- **Dashboard Summary**: Real-time aggregation of total income, total expense, and net savings.
+- **Monthly Spending Trends**: Timeline aggregation formatted as `YYYY-MM`.
+- **Category Breakdown**: Categorical expense distribution for charts and spending analysis.
 
 ---
 
@@ -98,294 +87,141 @@ React UI
 
 ```
 finforge/
-├── pom.xml                                   # Maven build — dependencies & plugins
+├── pom.xml                                   # Maven dependencies (Spring Data JPA, Web, MSSQL, Test)
+├── Dockerfile                                # Multi-stage production container image
+├── .dockerignore
 ├── sql/
-│   └── schema.sql                            # SQL Server DDL (tables, indexes, stored proc)
+│   └── schema.sql                            # SQL Server DDL (tables, indexes, constraints)
 └── src/
     ├── main/
-    │   ├── java/com/FinForge/
-    │   │   ├── dao/                          # DAO interfaces + JDBC implementations
-    │   │   │   ├── CategoryDAO(Impl).java
-    │   │   │   ├── ExpenseDAO(Impl).java
-    │   │   │   ├── IncomeDAO(Impl).java
-    │   │   │   ├── ReportDAO(Impl).java
-    │   │   │   └── UserDAO(Impl).java
-    │   │   ├── dto/                          # Form-field value containers
-    │   │   │   ├── CategoryDTO.java
-    │   │   │   ├── ExpenseDTO.java
-    │   │   │   ├── ExpenseFilterDTO.java     # Date-range + category filter
-    │   │   │   ├── IncomeDTO.java
-    │   │   │   ├── PagedResult.java          # Generic pagination wrapper
-    │   │   │   ├── ReportDTO.java
-    │   │   │   ├── MonthlyReportDTO.java
-    │   │   │   ├── CategoryReportDTO.java
-    │   │   │   └── UserDTO.java
-    │   │   ├── exception/                    # Typed checked exception hierarchy
-    │   │   │   ├── FinForgeException.java  (base)
-    │   │   │   ├── DAOException.java
-    │   │   │   ├── ValidationException.java
-    │   │   │   ├── DuplicateUserException.java
-    │   │   │   ├── InvalidCredentialsException.java
-    │   │   │   └── UserNotFoundException.java
-    │   │   ├── filter/
-    │   │   │   └── AuthFilter.java           # Redirect unauthenticated requests to /login
-    │   │   ├── model/                        # Domain entities
-    │   │   │   ├── Category.java
-    │   │   │   ├── Expense.java
-    │   │   │   ├── Income.java
-    │   │   │   └── User.java
-    │   │   ├── service/                      # Service interfaces + business logic impls
+    │   ├── java/com/finforge/
+    │   │   ├── FinForgeApplication.java      # Main Spring Boot entry point
+    │   │   ├── config/
+    │   │   │   └── CorsConfig.java           # Cross-Origin Resource Sharing configuration
+    │   │   ├── controller/api/               # Spring Boot REST API Controllers
+    │   │   │   ├── BaseApiController.java
+    │   │   │   ├── AuthApiController.java
+    │   │   │   ├── ExpenseApiController.java
+    │   │   │   ├── IncomeApiController.java
+    │   │   │   ├── CategoryApiController.java
+    │   │   │   ├── ReportApiController.java
+    │   │   │   └── UserApiController.java
+    │   │   ├── repository/                   # Spring Data JPA Repositories
+    │   │   │   ├── UserRepository.java
+    │   │   │   ├── CategoryRepository.java
+    │   │   │   ├── ExpenseRepository.java
+    │   │   │   └── IncomeRepository.java
+    │   │   ├── service/                      # Business logic (@Service, @Transactional)
     │   │   │   ├── CategoryService(Impl).java
     │   │   │   ├── ExpenseService(Impl).java
     │   │   │   ├── IncomeService(Impl).java
     │   │   │   ├── ReportService(Impl).java
     │   │   │   └── UserService(Impl).java
-    │   │   ├── servlet/                      # HTTP request handlers
-    │   │   │   ├── CategoryServlet.java
-    │   │   │   ├── ChangePasswordServlet.java
-    │   │   │   ├── DashboardServlet.java
-    │   │   │   ├── ExpenseServlet.java
-    │   │   │   ├── IncomeServlet.java
-    │   │   │   ├── LoginServlet.java
-    │   │   │   ├── LogoutServlet.java
-    │   │   │   ├── ProfileServlet.java
-    │   │   │   ├── RegisterServlet.java
-    │   │   │   └── ReportServlet.java
+    │   │   ├── model/                        # JPA Domain Entities (@Entity, @Table)
+    │   │   │   ├── User.java
+    │   │   │   ├── Category.java
+    │   │   │   ├── Expense.java
+    │   │   │   └── Income.java
+    │   │   ├── dto/                          # API Request/Response Data Transfer Objects
+    │   │   │   ├── CategoryDTO.java
+    │   │   │   ├── CategoryReportDTO.java
+    │   │   │   ├── ExpenseDTO.java
+    │   │   │   ├── ExpenseFilterDTO.java
+    │   │   │   ├── IncomeDTO.java
+    │   │   │   ├── MonthlyReportDTO.java
+    │   │   │   ├── PagedResult.java
+    │   │   │   ├── ReportDTO.java
+    │   │   │   └── UserDTO.java
+    │   │   ├── exception/                    # Custom application exceptions
+    │   │   │   ├── FinForgeException.java
+    │   │   │   ├── DAOException.java
+    │   │   │   ├── ValidationException.java
+    │   │   │   ├── DuplicateUserException.java
+    │   │   │   ├── InvalidCredentialsException.java
+    │   │   │   └── UserNotFoundException.java
     │   │   └── util/
-    │   │       ├── DBConnection.java         # JNDI-first, DriverManager fallback
-    │   │       ├── PasswordUtil.java         # SHA-256 hashing & verification
-    │   │       ├── SessionUtil.java          # Session attribute constants & helpers
-    │   │       └── ValidationUtil.java       # All input validation (throws ValidationException)
-    │   ├── resources/
-    │   │   ├── db.properties                 # JDBC fallback config (used in tests)
-    │   │   └── log4j2.xml                    # Logging config (console + rolling file)
-    │   └── webapp/
-    │       ├── index.jsp                     # Root redirect (dashboard or login)
-    │       ├── css/style.css
-    │       ├── js/main.js
-    │       ├── META-INF/context.xml          # Tomcat JNDI DataSource / DBCP2 pool
-    │       └── WEB-INF/
-    │           ├── web.xml                   # Servlet 6.0 descriptor, AuthFilter, JNDI ref
-    │           └── jsp/
-    │               ├── common/navbar.jsp
-    │               ├── category/             # list, add, edit
-    │               ├── expense/              # list (filter + pagination), add, edit
-    │               ├── income/               # list (pagination), add, edit
-    │               ├── report/report.jsp
-    │               ├── error/error.jsp
-    │               ├── dashboard.jsp
-    │               ├── login.jsp
-    │               ├── register.jsp
-    │               ├── profile.jsp
-    │               └── change-password.jsp
+    │   │       ├── DBConnection.java
+    │   │       ├── PasswordUtil.java
+    │   │       ├── SessionUtil.java
+    │   │       └── ValidationUtil.java
+    │   └── resources/
+    │       ├── application.properties        # Server port, datasource, & Hibernate configuration
+    │       └── log4j2.xml                    # Logging configuration
     └── test/
-        └── java/com/FinForge/
-            ├── dao/                          # Mockito-based DAO tests
-            │   ├── CategoryDAOTest.java
-            │   ├── ExpenseDAOTest.java
-            │   ├── IncomeDAOTest.java
-            │   └── UserDAOTest.java
-            ├── service/                      # Service tests with mocked DAOs
+        └── java/com/finforge/
+            ├── service/                      # Service layer unit tests (Mockito)
             │   ├── CategoryServiceTest.java
             │   ├── ExpenseServiceTest.java
             │   ├── IncomeServiceTest.java
             │   ├── ReportServiceTest.java
             │   └── UserServiceTest.java
-            └── util/                         # Pure unit tests (no mocking needed)
+            ├── dao/                          # Persistence layer unit tests (Mockito)
+            │   ├── CategoryDAOTest.java
+            │   ├── ExpenseDAOTest.java
+            │   ├── IncomeDAOTest.java
+            │   └── UserDAOTest.java
+            └── util/                         # Utility tests
                 ├── PasswordUtilTest.java
                 └── ValidationUtilTest.java
 ```
 
 ---
 
-## Prerequisites
+## Configuration (`application.properties`)
 
-| Requirement   | Version              |
-| ------------- | -------------------- |
-| JDK           | 21+                  |
-| Apache Maven  | 3.8+                 |
-| Apache Tomcat | 10.1+                |
-| SQL Server    | 2017+ (or Azure SQL) |
-
----
-
-## Database Setup
-
-1. Open `sql/schema.sql` in SQL Server Management Studio (or `sqlcmd`).
-2. Execute the entire script. It will:
-   - Create the `SmartFinForge` database (if not exists)
-   - Create tables: `users`, `categories`, `expenses`, `incomes`
-   - Add foreign keys, check constraints, and performance indexes
-   - Create the `sp_SeedDefaultCategories` stored procedure (called on registration)
-
-```sql
--- Quick start with sqlcmd
-sqlcmd -S localhost -U sa -P YourPassword -i sql/schema.sql
-```
-
----
-
-## Configuration
-
-### 1. Connection pool — `META-INF/context.xml`
-
-Edit `src/main/webapp/META-INF/context.xml` and set your SQL Server credentials:
-
-```xml
-<Resource name="jdbc/SmartFinForge"
-          ...
-          url="jdbc:sqlserver://localhost:1433;databaseName=SmartFinForge;
-               encrypt=true;trustServerCertificate=true"
-          username="sa"
-          password="YOUR_PASSWORD_HERE"
-          maxTotal="20"
-          maxIdle="10"
-          minIdle="5" />
-```
-
-> **Production note:** do not commit real passwords. Use Tomcat's `catalina.properties` for externalised secrets, or a secrets manager.
-
-### 2. JDBC fallback — `db.properties`
-
-`src/main/resources/db.properties` is used by unit tests and when running outside Tomcat (JNDI not available). Update the password:
+All backend runtime settings are defined in `src/main/resources/application.properties`:
 
 ```properties
-db.url=jdbc:sqlserver://localhost:1433;databaseName=SmartFinForge;encrypt=true;trustServerCertificate=true
-db.username=sa
-db.password=YOUR_PASSWORD_HERE
-db.driver=com.microsoft.sqlserver.jdbc.SQLServerDriver
+server.port=8082
+
+# SQL Server Datasource
+spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=FinForgeDB;encrypt=true;trustServerCertificate=true
+spring.datasource.username=sa
+spring.datasource.password=Your_Password123
+spring.datasource.driver-class-name=com.microsoft.sqlserver.jdbc.SQLServerDriver
+
+# Spring Data JPA & Hibernate
+spring.jpa.hibernate.ddl-auto=none
+spring.jpa.show-sql=false
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.SQLServerDialect
+spring.jpa.open-in-view=false
 ```
 
 ---
 
-## Build & Deploy
+## Running the Application
 
-### Build the WAR
+### Option 1: Local Development
+Ensure Java 21+ is installed, then run:
 
-```bash
-mvn clean package
+```powershell
+# In the finforge directory:
+.\mvnw.cmd spring-boot:run
 ```
 
-The WAR is produced at `target/smart-finforge-1.0.0.war`.
+The REST API will start on: `http://localhost:8082/api`
 
-### Deploy to Tomcat
-
-**Option A — hot copy**
-
-```bash
-cp target/smart-finforge-1.0.0.war $CATALINA_HOME/webapps/finforge.war
+### Option 2: Docker Container
+```powershell
+# Build and run backend container
+docker build -t finforge-backend .
+docker run -d -p 8082:8082 --name finforge-api finforge-backend
 ```
 
-**Option B — Tomcat Manager**
-
-Upload via `http://localhost:8080/manager/html`.
-
-### Access the application
-
+### Option 3: Full Stack via Docker Compose (Root Directory)
+```powershell
+# From the root finForge/ folder:
+docker compose up --build
 ```
-http://localhost:8080/finforge/
-```
-
-The root `index.jsp` redirects to `/dashboard` (if logged in) or `/login` (if not).
 
 ---
 
 ## Running Tests
 
-```bash
-# All tests
-mvn test
+Unit tests are written using **JUnit 5** and **Mockito 5**:
 
-# Specific test class
-mvn test -Dtest=PasswordUtilTest
-
-# With coverage report (requires jacoco plugin — not included by default)
-mvn verify
+```powershell
+# Run all test suites
+.\mvnw.cmd test
 ```
-
-Tests do **not** require a live database. All DAO tests mock `Connection`, `PreparedStatement`, and `ResultSet`. All service tests mock the DAO interfaces.
-
-### Test coverage summary
-
-| Package   | Test class            | What is tested                                                              |
-| --------- | --------------------- | --------------------------------------------------------------------------- |
-| `dao`     | `UserDAOTest`         | save, findByUsername, updatePassword                                        |
-| `dao`     | `ExpenseDAOTest`      | save, findById, findAll, update, delete                                     |
-| `dao`     | `IncomeDAOTest`       | save, findById, findAll, update, delete                                     |
-| `dao`     | `CategoryDAOTest`     | save, findAll, existsByName, delete                                         |
-| `service` | `UserServiceTest`     | register, login, changePassword                                             |
-| `service` | `ExpenseServiceTest`  | addExpense, updateExpense, deleteExpense                                    |
-| `service` | `IncomeServiceTest`   | addIncome, updateIncome, deleteIncome                                       |
-| `service` | `CategoryServiceTest` | addCategory, duplicate check, delete                                        |
-| `service` | `ReportServiceTest`   | totals, net savings, monthly/category breakdown, DAO delegation             |
-| `util`    | `PasswordUtilTest`    | hash length, determinism, avalanche effect, SHA-256 test vector, null guard |
-| `util`    | `ValidationUtilTest`  | all 8 validation methods, boundary values, parameterised invalid inputs     |
-
----
-
-## URL Reference
-
-| Method   | URL                          | Description                                                     |
-| -------- | ---------------------------- | --------------------------------------------------------------- |
-| GET      | `/`                          | Root redirect                                                   |
-| GET/POST | `/login`                     | Login form / authenticate                                       |
-| GET/POST | `/register`                  | Registration form / create account                              |
-| GET      | `/logout`                    | Invalidate session                                              |
-| GET      | `/dashboard`                 | Financial summary                                               |
-| GET      | `/expenses`                  | List expenses (supports `?fromDate=&toDate=&categoryId=&page=`) |
-| GET      | `/expenses?action=add`       | Add expense form                                                |
-| POST     | `/expenses?action=add`       | Save new expense                                                |
-| GET      | `/expenses?action=edit&id=n` | Edit expense form                                               |
-| POST     | `/expenses?action=edit`      | Update expense                                                  |
-| POST     | `/expenses?action=delete`    | Delete expense                                                  |
-| GET      | `/incomes`                   | List income records (supports `?page=`)                         |
-| GET/POST | `/incomes?action=add`        | Add income                                                      |
-| GET/POST | `/incomes?action=edit&id=n`  | Edit income                                                     |
-| POST     | `/incomes?action=delete`     | Delete income                                                   |
-| GET/POST | `/categories`                | Category CRUD (same pattern as above)                           |
-| GET      | `/reports`                   | Full financial report                                           |
-| GET/POST | `/profile`                   | View / update profile                                           |
-| GET/POST | `/change-password`           | Change password                                                 |
-
----
-
-## Security Notes
-
-- **SQL injection** — every query uses `PreparedStatement` with parameterised placeholders. No string concatenation in SQL.
-- **XSS** — JSPs use `<c:out>` for user-supplied content output; unescaped `${...}` is only used for safe server-set attributes.
-- **CSRF** — action routing is POST-only for all mutations; delete actions use confirmation dialogs.
-- **Password storage** — passwords are stored as SHA-256 hex hashes. Plain-text passwords never persist.
-- **Session fixation** — `SessionUtil.invalidateSession` calls `session.invalidate()` on logout.
-- **Session cookies** — `<http-only>true</http-only>` set in `web.xml`.
-- **Authentication** — `AuthFilter` protects `/dashboard`, `/expenses`, `/incomes`, `/categories`, `/reports`, `/profile`, `/change-password`. Unauthenticated requests are redirected to `/login`.
-- **Connection pool** — Tomcat DBCP2 with abandoned-connection recovery; credentials are not embedded in source code (use `context.xml` or externalised config).
-
----
-
-## Logging
-
-Log4j 2 is configured in `src/main/resources/log4j2.xml`.
-
-| Logger                | Level | Destination            |
-| --------------------- | ----- | ---------------------- |
-| `com.finforge`  | DEBUG | Console + rolling file |
-| Root (all other libs) | WARN  | Console only           |
-
-**Log file location:** `logs/smart-finforge.log` relative to the JVM working directory (typically `$CATALINA_HOME`). Files rotate daily and at 10 MB, keeping a maximum of 30 archives.
-
-**What gets logged:**
-
-| Event                                                 | Level |
-| ----------------------------------------------------- | ----- |
-| Successful login / registration / logout              | INFO  |
-| Failed login / registration / validation              | WARN  |
-| Expense / income / category created, updated, deleted | INFO  |
-| Filter/search queries                                 | DEBUG |
-| DAO or SQL errors                                     | ERROR |
-| Dashboard / report generation failures                | ERROR |
-
----
-
-## License
-
-This project is intended for educational and portfolio purposes.
