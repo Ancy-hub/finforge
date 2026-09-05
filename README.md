@@ -62,7 +62,7 @@ The system follows a strict, decoupled flow:
 
 ```
 finForge/
-├── finforge-ui-react/               # React UI Frontend Application
+├── finForgeUI/                      # React UI Frontend Application
 │   ├── src/
 │   │   ├── components/              # UI Components (Navbar, FlowBanner, Modals, Toasts)
 │   │   ├── controllers/             # UI Controllers (Flow, Routing & Service Delegation)
@@ -162,12 +162,12 @@ The REST API will be available at:
 
 ---
 
-### Step 2: Run the React UI (`finforge-ui-react`)
+### Step 2: Run the React UI (`finForgeUI`)
 
 Open a second terminal to run the Vite development server:
 
 ```powershell
-cd c:\Users\ancza\Downloads\finForge\finforge-ui-react
+cd finForgeUI
 npm install
 npm run dev
 ```

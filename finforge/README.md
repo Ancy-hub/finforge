@@ -40,7 +40,7 @@ A full-stack **enterprise-style personal finance web application** built with pu
 
 ## Architecture
 
-The application now supports both standard Java EE servlets and modern **Spring Boot REST API Controllers** (`/api/...`) connecting to the decoupled **React UI** (`finforge-ui-react`):
+The application now supports both standard Java EE servlets and modern **Spring Boot REST API Controllers** (`/api/...`) connecting to the decoupled **React UI** (`finForgeUI`):
 
 ```
 React UI
